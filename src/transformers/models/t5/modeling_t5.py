@@ -450,6 +450,16 @@ class T5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    def get_discounting_matrix(self, size, decay_rate):
+        # last modified: Tac
+        # Create a range matrix where each element is the absolute difference from the diagonal
+        range_matrix = torch.abs(torch.arange(size).unsqueeze(0) - torch.arange(size).unsqueeze(1))
+
+        # Apply linear decay based on the distance from the diagonal
+        discount_matrix = - decay_rate * range_matrix
+
+        return discount_matrix
+
     def forward(
         self,
         hidden_states,
@@ -531,6 +541,17 @@ class T5Attention(nn.Module):
         scores = torch.matmul(
             query_states, key_states.transpose(3, 2)
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+
+        """Tac's code"""
+        # Apply your discounting idea only for self-attention and when the matrix is square
+        if key_value_states is None:  # This indicates self-attention
+            batch_size, num_heads, query_length, key_length = scores.size()
+            if query_length == key_length:  # Check if the matrix is square
+                decay_rate = 0.05  # Choose an appropriate decay rate
+                discount_matrix = self.get_discounting_matrix(query_length, decay_rate)
+                discount_matrix = discount_matrix.to(scores.device).unsqueeze(0).unsqueeze(0)  # Adjust shape to match scores tensor
+                scores += discount_matrix.repeat(batch_size, num_heads, 1, 1)  # Apply the discounting
+        """Tac's code"""
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
@@ -1024,12 +1045,17 @@ class T5Stack(T5PreTrainedModel):
             if not self.is_decoder:
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
+            encoder_seq_length = encoder_hidden_states.shape[1]
+            encoder_attention_mask = torch.ones(
+                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
+            )
+
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
-
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1041,9 +1067,7 @@ class T5Stack(T5PreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(
-                    encoder_hidden_shape, device=inputs_embeds.device, dtype=torch.long
-                )
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
