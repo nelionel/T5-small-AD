@@ -1141,7 +1141,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return "pt"
 
-    def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
+    def __init__(self, config: PretrainedConfig, *inputs, decay_rate = 0.0, **kwargs):        # Modified by Ionel, added decay rate
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
