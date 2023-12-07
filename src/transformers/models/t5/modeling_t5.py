@@ -346,7 +346,7 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False, **kwargs):    # add **kwargs, Ionel 
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -357,6 +357,7 @@ class T5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.decay_rate = kwargs.get(decay_rate, 0)    # Add decay rate, Ionel
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -450,13 +451,14 @@ class T5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
-    def get_discounting_matrix(self, size, decay_rate):
+    # Tac's code
+    def get_discounting_matrix(self, size):
         # last modified: Tac
         # Create a range matrix where each element is the absolute difference from the diagonal
         range_matrix = torch.abs(torch.arange(size).unsqueeze(0) - torch.arange(size).unsqueeze(1))
 
         # Apply linear decay based on the distance from the diagonal
-        discount_matrix = - decay_rate * range_matrix
+        discount_matrix = - self.decay_rate * range_matrix
 
         return discount_matrix
 
@@ -602,9 +604,9 @@ class T5Attention(nn.Module):
 
 
 class T5LayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config, has_relative_attention_bias=False, **kwargs):    # Add **kwargs
         super().__init__()
-        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get(decay_rate, 0))
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -670,11 +672,11 @@ class T5LayerCrossAttention(nn.Module):
 
 
 class T5Block(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config, has_relative_attention_bias=False, **kwargs):    # Added **kwargs, Ionel
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get(decay_rate, 0)))
         if self.is_decoder:
             self.layer.append(T5LayerCrossAttention(config))
 
@@ -922,7 +924,7 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5Stack(T5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config, embed_tokens=None, **kwargs):    # add **kwards, Ionel
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
@@ -1371,7 +1373,7 @@ class T5Model(T5PreTrainedModel):
     ]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: T5Config, **kwargs):    # add **kwargs, Ionel
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1586,13 +1588,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared)
+        self.encoder = T5Stack(encoder_config, self.shared, decay_rate=kwargs.get(decay_rate, 0))    # Ionel
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared)
+        self.decoder = T5Stack(decoder_config, self.shared)    # Do not modify the encoder
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
