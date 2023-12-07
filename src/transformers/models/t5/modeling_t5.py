@@ -1576,7 +1576,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     ]
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: T5Config, **kwargs):       # Added **kwargs, Ionel
         super().__init__(config)
         self.model_dim = config.d_model
 
