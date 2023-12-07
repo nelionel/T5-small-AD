@@ -1141,7 +1141,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         return "pt"
 
-    def __init__(self, config: PretrainedConfig, *inputs, decay_rate = 0.0, **kwargs):        # Modified by Ionel, added decay rate
+    def __init__(self, config: PretrainedConfig, *inputs, **kwargs):        # Modified by Ionel, added decay rate
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
@@ -2339,7 +2339,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         use_safetensors: bool = None,
-        decay_rate: float = 0.0        # Modified by Ionel
+        # decay_rate: float = 0.0        # Modified by Ionel
         **kwargs,
     ):
         r"""
