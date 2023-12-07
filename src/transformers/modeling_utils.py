@@ -2339,6 +2339,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         use_safetensors: bool = None,
+        decay_rate: float = 0.0        # Modified by Ionel
         **kwargs,
     ):
         r"""
