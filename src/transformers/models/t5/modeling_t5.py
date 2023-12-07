@@ -357,7 +357,7 @@ class T5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
-        self.decay_rate = kwargs.get(decay_rate, 0)    # Add decay rate, Ionel
+        self.decay_rate = kwargs.get("decay_rate", 0)    # Add decay rate, Ionel
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -549,8 +549,7 @@ class T5Attention(nn.Module):
         if key_value_states is None:  # This indicates self-attention
             batch_size, num_heads, query_length, key_length = scores.size()
             if query_length == key_length:  # Check if the matrix is square
-                decay_rate = 0.05  # Choose an appropriate decay rate
-                discount_matrix = self.get_discounting_matrix(query_length, decay_rate)
+                discount_matrix = self.get_discounting_matrix(query_length) # Simplified some of Tac's code, Ionel
                 discount_matrix = discount_matrix.to(scores.device).unsqueeze(0).unsqueeze(0)  # Adjust shape to match scores tensor
                 scores += discount_matrix.repeat(batch_size, num_heads, 1, 1)  # Apply the discounting
         """Tac's code"""
@@ -606,7 +605,7 @@ class T5Attention(nn.Module):
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):    # Add **kwargs
         super().__init__()
-        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get(decay_rate, 0))
+        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get("decay_rate", 0))
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -676,7 +675,7 @@ class T5Block(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get(decay_rate, 0)))
+        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, decay_rate=kwargs.get("decay_rate", 0)))
         if self.is_decoder:
             self.layer.append(T5LayerCrossAttention(config))
 
@@ -1588,7 +1587,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared, decay_rate=kwargs.get(decay_rate, 0))    # Ionel
+        self.encoder = T5Stack(encoder_config, self.shared, decay_rate=kwargs.get("decay_rate", 0))    # Ionel
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
